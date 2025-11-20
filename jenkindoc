@@ -1,27 +1,26 @@
 pipeline {
-  agent any   // <-- replace with your actual slave label
+  agent any
 
   environment {
     GITHUB_REPO  = 'https://github.com/Madhumeg11/NEW-REPO-GIT1.git'
     GIT_BRANCH   = 'main'
 
-    GITHUB_CRED  = 'git_cred1'        // <-- GitHub credential from your screenshot
-    DOCKER_CRED  = 'docker_cred'      // <-- DockerHub credential from screenshot
+    GITHUB_CRED  = 'git_cred1'    // your GitHub credential id
+    DOCKER_CRED  = 'docker_cred'  // your DockerHub credential id
 
-    IMAGE_NAME   = 'myapp'            // <--- Name of Docker image in DockerHub
+    IMAGE_NAME   = 'myapp'        // change if you want another repo name
   }
+
+  options { timestamps(); buildDiscarder(logRotator(numToKeepStr: '20')) }
 
   stages {
 
-    stage('Checkout from GitHub') {
+    stage('Checkout') {
       steps {
         checkout([
           $class: 'GitSCM',
           branches: [[name: "*/${env.GIT_BRANCH}"]],
-          userRemoteConfigs: [[
-            url: env.GITHUB_REPO,
-            credentialsId: env.GITHUB_CRED
-          ]]
+          userRemoteConfigs: [[ url: env.GITHUB_REPO, credentialsId: env.GITHUB_CRED ]]
         ])
       }
     }
@@ -30,7 +29,7 @@ pipeline {
       steps {
         script {
           if (!fileExists('Dockerfile')) {
-            echo "No Dockerfile found — creating lightweight Alpine Dockerfile"
+            echo "No Dockerfile found — creating small Alpine Dockerfile."
             sh '''
               cat > Dockerfile <<'EOF'
               FROM alpine:3.18
@@ -42,71 +41,61 @@ pipeline {
 
               cat > hello.sh <<'EOF'
               #!/bin/sh
-              echo "Hello from lightweight test image built at $(date)"
+              echo "Hello from lightweight test image built at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
               EOF
             '''
           } else {
-            echo "Using Dockerfile from the repo"
+            echo "Using Dockerfile from repo."
           }
+          sh 'ls -la'
         }
       }
     }
 
-    stage('Docker Login') {
+    stage('Docker: Login, Build & Push') {
       steps {
+        // DOCKER_USER & DOCKER_PASS are available only inside this block
         withCredentials([usernamePassword(credentialsId: env.DOCKER_CRED,
                                           usernameVariable: 'DOCKER_USER',
                                           passwordVariable: 'DOCKER_PASS')]) {
+          script {
+            // Login
+            sh '''
+              echo "Logging into Docker Hub as $DOCKER_USER"
+              echo $DOCKER_PASS | docker login -u "$DOCKER_USER" --password-stdin
+            '''
 
-          sh '''
-            echo $DOCKER_PASS | docker login -u "$DOCKER_USER" --password-stdin
-          '''
+            // Build & tag
+            def ts = sh(script: "date +%Y%m%d%H%M%S", returnStdout: true).trim()
+            env.IMAGE_TAG    = "${DOCKER_USER}/${IMAGE_NAME}:${ts}"
+            env.IMAGE_LATEST = "${DOCKER_USER}/${IMAGE_NAME}:latest"
+
+            sh """
+              docker build -t ${env.IMAGE_TAG} .
+              docker tag ${env.IMAGE_TAG} ${env.IMAGE_LATEST}
+              docker images | head -n 20
+            """
+
+            // Push
+            sh """
+              docker push ${env.IMAGE_TAG}
+              docker push ${env.IMAGE_LATEST}
+            """
+
+            // Optional quick verify (won't fail the job if run returns non-zero)
+            sh 'docker run --rm ${IMAGE_LATEST} || true'
+          }
         }
-      }
-    }
-
-    stage('Build Image') {
-      steps {
-        script {
-          def ts = sh(script: "date +%Y%m%d%H%M%S", returnStdout: true).trim()
-          env.IMAGE_TAG    = "${DOCKER_USER}/${IMAGE_NAME}:${ts}"
-          env.IMAGE_LATEST = "${DOCKER_USER}/${IMAGE_NAME}:latest"
-
-          sh """
-            docker build -t ${IMAGE_TAG} .
-            docker tag ${IMAGE_TAG} ${IMAGE_LATEST}
-          """
-        }
-      }
-    }
-
-    stage('Push Image') {
-      steps {
-        sh """
-          docker push ${IMAGE_TAG}
-          docker push ${IMAGE_LATEST}
-        """
-      }
-    }
-
-    stage('Verify Image (Optional)') {
-      steps {
-        sh """
-          docker run --rm ${IMAGE_LATEST}
-        """
       }
     }
   }
 
   post {
     always {
-      sh "docker logout || true"
+      sh 'docker logout || true'
+      sh 'docker rmi -f ${IMAGE_LATEST} ${IMAGE_TAG} || true'
     }
-    success {
-      echo "SUCCESS: Image pushed → ${env.IMAGE_TAG}"
-    }
-    failure {
-      echo "FAILED: Check console logs"
-    }
+    success { echo "SUCCESS: pushed ${env.IMAGE_TAG}" }
+    failure { echo "FAILED: check console log" }
   }
 }
