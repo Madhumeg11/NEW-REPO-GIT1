@@ -1,0 +1,35 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_URL         = "https://github.com/Madhumeg11/NEW-REPO-GIT1.git"
+        GIT_BRANCH      = "main"
+        GIT_CREDENTIALS = "git_cred1"     // Use this one
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git url: "${GIT_URL}",
+                    branch: "${GIT_BRANCH}",
+                    credentialsId: "${GIT_CREDENTIALS}"
+            }
+        }
+
+        stage('List Files') {
+            steps {
+                sh '''
+                    ls -lrt
+                '''
+            }
+        }
+
+        stage('Count Files') {
+            steps {
+                sh '''
+                    find . -type f | wc -l
+                '''
+            }
+        }
+    }
+}
