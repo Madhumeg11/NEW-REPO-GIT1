@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'docker-agent' }   // <-- replace with your actual slave label
+  agent any   // <-- replace with your actual slave label
 
   environment {
     GITHUB_REPO  = 'https://github.com/Madhumeg11/NEW-REPO-GIT1.git'
