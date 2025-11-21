@@ -12,7 +12,7 @@ pipeline {
             steps {
                 script {
                     // call shared lib step (name must match vars/<name>.groovy)
-                    gitcheckout(env.git_url, env.git_branch, env.git_cred)
+                    gitCheckout(env.git_url, env.git_branch, env.git_cred)
                 }
             }
         }
