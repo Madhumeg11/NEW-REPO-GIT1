@@ -1,0 +1,25 @@
+@Library('gitcheckouts') _
+pipeline {
+    agent any
+
+    environment {
+        git_url = "https://github.com/Madhumeg11/NEW-REPO-GIT1.git"
+        git_branch = "main"
+        git_cred = "git_cred1"   // leave empty "" if repo is public
+    }
+    stages {
+        stage('checkout') {
+            steps {
+                script {
+                    // call shared lib step (name must match vars/<name>.groovy)
+                    gitcheckout(env.git_url, env.git_branch, env.git_cred)
+                }
+            }
+        }
+        stage('run') {
+            steps {
+                sh 'pwd && ls -la'
+            }
+        }
+    }
+}
